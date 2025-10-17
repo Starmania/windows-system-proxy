@@ -1,5 +1,3 @@
-import type { RegistryValue } from 'registry-js';
-
 export interface WindowsProxySettings {
     proxyUrl: string;
     noProxy: string[];
@@ -10,29 +8,34 @@ export async function getWindowsSystemProxy(): Promise<WindowsProxySettings | un
         throw new Error("Can't detect windows system proxy on non-Windows platform");
     }
 
-    const registry = await import('registry-js');
+    const nativeReg = await import('native-reg');
 
-    const proxyValues = registry.enumerateValues(
-        registry.HKEY.HKEY_CURRENT_USER,
-        'Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'
-    );
+    const proxyValues = nativeReg.openKey(
+        nativeReg.HKCU,
+        'Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
+        nativeReg.Access.READ
+    )
 
-    const proxyEnabled = getValue(proxyValues, 'ProxyEnable');
-    const proxyServer = getValue(proxyValues, 'ProxyServer');
+    if (!proxyValues) return undefined;
+
+    const proxyEnabled = nativeReg.queryValue(proxyValues, 'ProxyEnable')
+    const proxyServer = nativeReg.queryValue(proxyValues, 'ProxyServer')
 
     // No proxy config? We're done, return undefined.
-    if (!proxyEnabled || !proxyEnabled.data || !proxyServer || !proxyServer.data) return undefined;
+    if (!proxyEnabled || !proxyServer) return undefined;
 
     // ProxyOverride is a ;-separated list of hosts not to proxy
-    const proxyOverride = getValue(proxyValues, 'ProxyOverride')?.data;
+    const proxyOverride = nativeReg.queryValue(proxyValues, 'ProxyOverride');
     const noProxy = (proxyOverride ? (proxyOverride as string).split(';') : [])
         .flatMap((host) => host === '<local>'
             ? ['localhost', '127.0.0.1', '::1']
             : [host]
         );
 
+    nativeReg.closeKey(proxyValues);
+
     // ProxyServer specifies the proxy host(s), but in a few different formats...
-    const proxyConfigString = proxyServer.data as string;
+    const proxyConfigString = proxyServer as string;
 
     if (proxyConfigString.startsWith('http://') || proxyConfigString.startsWith('https://')) {
         // Unclear whether this is used in reality, but it's an example of a valid config in the microsoft
@@ -75,7 +78,3 @@ export async function getWindowsSystemProxy(): Promise<WindowsProxySettings | un
         };
     }
 }
-
-
-const getValue = (values: readonly RegistryValue[], name: string) =>
-    values.find((value) => value?.name === name);

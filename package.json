@@ -41,6 +41,6 @@
     "typescript": "~4.8"
   },
   "dependencies": {
-    "registry-js": "^1.15.1"
+    "native-reg": "^1.1.1"
   }
 }
